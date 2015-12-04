@@ -290,6 +290,13 @@ def create_model(data, timesteps=None, dt=1):
 
     # Variables
 
+    # site                                                                         
+    m.angle = pyomo.Var(
+        m.tm, m.sit,
+        bounds=(-10,10),
+        within=pyomo.Reals,
+        doc='Angle (in degree)')
+
     # costs
     m.costs = pyomo.Var(
         m.cost_type,
@@ -478,6 +485,10 @@ def create_model(data, timesteps=None, dt=1):
         m.tra_tuples,
         rule=res_transmission_symmetry_rule,
         doc='total transmission capacity must be symmetric in both directions')
+    m.transmission_dc_flow = pyomo.Constraint(                                  
+        m.tm, m.tra_tuples,
+        rule=transmission_dc_flow_rule,
+        doc='dc power flow ')
 
     # storage
     m.def_storage_state = pyomo.Constraint(
@@ -771,7 +782,15 @@ def res_transmission_capacity_rule(m, sin, sout, tra, com):
 # transmission capacity from A to B == transmission capacity from B to A
 def res_transmission_symmetry_rule(m, sin, sout, tra, com):
     return m.cap_tra[sin, sout, tra, com] == m.cap_tra[sout, sin, tra, com]
-
+    
+# transmission from A to B - transmission from B to A == 
+# admittance of connection AB * (angle in A - angle in B)
+def transmission_dc_flow_rule(m, tm, sin, sout, tra, com):
+    return (m.e_tra_in[tm, sin, sout, tra, com] - 
+            m.e_tra_in[tm, sout, sin, tra, com] ==    
+            m.transmission.loc[sin, sout, tra, com]['admittance'] * 
+            (m.angle[tm, sin] - m.angle[tm, sout]))
+            
 # storage
 
 # storage content in timestep [t] == storage content[t-1]
