@@ -269,6 +269,14 @@ def create_model(data, timesteps=None, dt=1):
         within=m.com,
         initialize=commodity_subset(m.com_tuples, 'Env'),
         doc='Commodities that (might) have a maximum creation limit')
+        
+    #dc flow rule subset
+    m.dc_flow_tuples = pyomo.Set(
+        within=m.sit*m.sit*m.tra*m.com,
+        initialize=dc_flow_subset(m, m.tra_tuples, 'hvac'),
+        doc='Transmission lines for hvac (dc flow rule is valid)')
+    
+    
 
     # Parameters
 
@@ -486,7 +494,7 @@ def create_model(data, timesteps=None, dt=1):
         rule=res_transmission_symmetry_rule,
         doc='total transmission capacity must be symmetric in both directions')
     m.transmission_dc_flow = pyomo.Constraint(                                  
-        m.tm, m.tra_tuples,
+        m.tm, m.dc_flow_tuples,
         rule=transmission_dc_flow_rule,
         doc='dc power flow ')
 
@@ -1100,6 +1108,24 @@ def commodity_subset(com_tuples, type_name):
         # type_name: ('Buy')=>('Elec buy', 'Heat buy')
         return set((sit, com, com_type) for sit, com, com_type in com_tuples
                    if com in type_name)
+
+def dc_flow_subset(m, tra_tuples, type_name):
+    """unique list of transmission tuples for given type with given admittance.
+    
+    Args: 
+        m: the created model, to access admittance parameter
+        tra_tuples: a list of (site in, site out, transmission type, commodity) tuples
+        type_name: a transmission type
+        
+    Returns: 
+        The set of transmission tuples of desired type
+        for which dc_flow_rule is valid and admittance is given
+    """
+    return set((site_in, site_out, transmission, commodity) 
+                for site_in, site_out, transmission, commodity in tra_tuples
+                if transmission == type_name
+                and not math.isnan(m.transmission.loc[site_in,site_out,transmission,commodity]['admittance']) )
+                #and isinstance(m.transmission.loc[site_in,site_out,transmission,commodity]['admittance'], (float, int)) )
 
 def get_com_price(instance, tuples):
     """ Calculate commodity prices for each modelled timestep.
