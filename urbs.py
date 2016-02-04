@@ -270,7 +270,7 @@ def create_model(data, timesteps=None, dt=1):
         initialize=commodity_subset(m.com_tuples, 'Env'),
         doc='Commodities that (might) have a maximum creation limit')
         
-    #dc flow rule subset
+    #transmission subset
     m.dc_flow_tuples = pyomo.Set(
         within=m.sit*m.sit*m.tra*m.com,
         initialize=dc_flow_subset(m, m.tra_tuples, 'hvac'),
@@ -301,7 +301,6 @@ def create_model(data, timesteps=None, dt=1):
     # site                                                                         
     m.angle = pyomo.Var(
         m.tm, m.sit,
-        bounds=(-10,10),
         within=pyomo.Reals,
         doc='Angle (in degree)')
 
@@ -794,7 +793,7 @@ def res_transmission_symmetry_rule(m, sin, sout, tra, com):
 # transmission from A to B - transmission from B to A == 
 # admittance of connection AB * (angle in A - angle in B)
 def transmission_dc_flow_rule(m, tm, sin, sout, tra, com):
-    return (m.e_tra_in[tm, sin, sout, tra, com] - 
+    return (m.e_tra_in[tm, sin, sout, tra, com] -
             m.e_tra_in[tm, sout, sin, tra, com] ==    
             m.transmission.loc[sin, sout, tra, com]['admittance'] * 
             (m.angle[tm, sin] - m.angle[tm, sout]))
@@ -1125,7 +1124,7 @@ def dc_flow_subset(m, tra_tuples, type_name):
                 for site_in, site_out, transmission, commodity in tra_tuples
                 if transmission == type_name
                 and not math.isnan(m.transmission.loc[site_in,site_out,transmission,commodity]['admittance']) )
-                #and isinstance(m.transmission.loc[site_in,site_out,transmission,commodity]['admittance'], (float, int)) )
+                
 
 def get_com_price(instance, tuples):
     """ Calculate commodity prices for each modelled timestep.

@@ -58,9 +58,10 @@ and the single output ``electricity``.
 Transmission
 ^^^^^^^^^^^^
 Transmission allows transporting commodities between sites without delay. It is
-characterised by an efficiency and costs, just like processes. Transmission is
-defined over the tuple ``(site in, site out, transmission, commodity)``. For
-example, ``(Iceland, Norway, undersea cable, electricity)`` would represent an
+characterised by dc flow equations, which define the power flow between sites
+depending on voltage angle and admittance. Transmission is defined over the tuple
+``(site in, site out, transmission, commodity)``. For example,
+``(Iceland, Norway, undersea cable, electricity)`` would represent an
 undersea cable for electricity between Iceland and Norway.
 
 Storage

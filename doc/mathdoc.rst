@@ -372,6 +372,42 @@ Where:
   :param type_name: A commodity type or a list of commodity types
 
   :return: The set (unique elements/list) of commodity names of the desired commodity type.
+  
+Transmission Subset
+======================
+
+Transmission subset represents the transmission tuples for which dc_flow_rule is valid. This is when transmission technology is set to `hvac` and admittance is in the range of real numbers. 
+Transmission subset is a subset of transmission tuples. 
+This subset can be obtained by filtering the transmission tuples :math:`F_{c{v_\text{out}}{v_\text{in}}}` by transmission technology. Additionaly the values of addmitance have to be tested to fullfill the above mentioned constraints.
+
+Transmission Subset is given by the code fragment:
+::
+
+m.dc_flow_tuples = pyomo.Set(
+        within=m.sit*m.sit*m.tra*m.com,
+        initialize=dc_flow_subset(m, m.tra_tuples, 'hvac'),
+        doc='Transmission lines for hvac (dc flow rule is valid)')
+        
+Where:
+
+.. function:: dc_flow_subset(m, tra_tuples, type_name)
+
+    """unique list of transmission tuples for given type with given admittance.
+    
+    Args: 
+        m: the created model, to access admittance parameter
+        tra_tuples: a list of (site in, site out, transmission type, commodity) tuples
+        type_name: a transmission type
+        
+    Returns: 
+        The set of transmission tuples of desired type
+        for which dc_flow_rule is valid and admittance is given
+    """
+    return set((site_in, site_out, transmission, commodity) 
+                for site_in, site_out, transmission, commodity in tra_tuples
+                if transmission == type_name
+                and not math.isnan(m.transmission.loc[site_in,site_out,transmission,commodity]['admittance']) )
+
 
 Variables
 =========
@@ -388,6 +424,10 @@ These Sections are Cost, Commodity, Process, Transmission and Storage.
 	+------------------------------------+------+----------------------------------+
 	| Variable                           | Unit | Description                      |
 	+====================================+======+==================================+
+	| **Site  Variables**                                                          |
+	+------------------------------------+------+----------------------------------+
+    | :math:`\alpha`                     | deg  | Voltage Angle                    |
+    +------------------------------------+------+----------------------------------+
 	| **Cost  Variables**                                                          |
 	+------------------------------------+------+----------------------------------+
 	| :math:`\zeta`                      | €/a  | Total System Cost                |
@@ -453,6 +493,16 @@ These Sections are Cost, Commodity, Process, Transmission and Storage.
 
 
 	
+Site Variables
+^^^^^^^^^^^^^^
+**Voltage Angle**, :math:`\alpha`, ``angle``: The variable :math:`\alpha` represents the voltage angle in each site :math:`v`. This variable is expressed in the unit degree. It is needed to calculate the dc flow in transmission lines. 
+In script ``urbs.py`` this variable is defined by the model variable ``angle`` and initialized by the following code fragment: ::
+
+    m.angle = pyomo.Var(
+        m.tm, m.sit,
+        within=pyomo.Reals,
+        doc='Angle (in degree)')
+    
 Cost Variables
 ^^^^^^^^^^^^^^
 **Total System Cost**, :math:`\zeta` : the variable :math:`\zeta` represents
@@ -748,6 +798,8 @@ Technical Parameters
 	+-----------------------------------+----+--------------------------------------------+
 	|:math:`\overline{K}_{af}`          |MW  |Tranmission Capacity Upper Bound            |
 	+-----------------------------------+----+--------------------------------------------+
+	|:math:`y_{af}`                     |MW/deg|Transmission Admittance                   |
+	+-----------------------------------+----+--------------------------------------------+
 
 General Technical Parameters
 ----------------------------
@@ -840,6 +892,8 @@ Transmission Technical Parameters
 **Tranmission Capacity Installed**, :math:`K_{af}`, ``m.transmission.loc[sin,sout,tra,com]['inst-cap']``: The parameter :math:`K_{af}` represents the amount of power output capacity of a transmission :math:`f` transferring a commodity :math:`c` through an arc :math:`a`, that is already installed to the energy system at the beginning of the simulation. The unit of this parameter is MW. The related section for this parameter in the spreadsheet can be found under the "Transmission" sheet. Here each row represents another transmission,site in, site out, commodity combination. The tenth column with the header label "inst-cap" represents the parameters :math:`K_{af}` of the corresponding combinations.
 
 **Tranmission Capacity Upper Bound**, :math:`\overline{K}_{af}`, ``m.transmission.loc[sin,sout,tra,com]['cap-up']``: The parameter :math:`\overline{K}_{af}` represents the maximum power output capacity of a transmission :math:`f` transferring a commodity :math:`c` through an arc :math:`a`, that the energy system model is allowed to have. Here an arc :math:`a` defines the connection line from an origin site :math:`v_\text{out}` to a destination site :math:`{v_\text{in}}`. The unit of this parameter is MW. The related section for this parameter in the spreadsheet can be found under the "Transmission" sheet. Here each row represents another transmission, site in, site out, commodity combination. The tenth column with the header label "cap-up" represents the parameters :math:`\overline{K}_{af}` of the corresponding combinations. 
+
+**Tranmission Admittance**, :math:`y_{af}`, ``m.transmission.loc[sin,sout,tra,com]['admittance']``: The parameter :math:`y_{af}` represents the admittance of transmission :math:`f` transferring a commodity :math:`c` through an arc :math:`a`, that the energy system model is allowed to have. Here an arc :math:`a` defines the connection line from an origin site :math:`v_\text{out}` to a destination site :math:`{v_\text{in}}`. The unit of this parameter is MW/degree. The related section for this parameter in the spreadsheet can be found under the "Transmission" sheet. Here each row represents another transmission, site in, site out, commodity combination. The thirteenth column with the header label "admittance" represents the parameters :math:`y_{af}` of the corresponding combinations. 
 
 Economical Parameters
 ^^^^^^^^^^^^^^^^^^^^^
@@ -1893,6 +1947,28 @@ In script ``urbs.py`` the constraint transmission symmetry rule is defined and c
 
 	def res_transmission_symmetry_rule(m, sin, sout, tra, com):
 		return m.cap_tra[sin, sout, tra, com] == m.cap_tra[sout, sin, tra, com]
+        
+**Transmission DC Flow Rule**: The constraint transmission dc flow rule defines the variable transmission power flow :math:`\pi_{aft}^\text{in}` through an arc :math:`a` depending on dc power flow equation. The constraint states that the power flow of the outgoing arc :math:`\pi_{aft}^\text{in}` minus the power flow of the incoming arc :math:`\pi_{a'ft}^\text{in}` in each site :math:`v` is equal to the product of the admittance :math:`y_{af}` of arc :math:`a` and the difference in voltage angle :math:`\alpha` of the connected sites. In mathematical notation this is expressed as:
+
+.. math::
+
+	\forall a\in A, f\in F\colon \qquad & \qquad \kappa_{af} - \kappa_{a'f} &= `y_{af}` \alpha_\text{in}-\alpha_\text{out}
+
+In script ``urbs.py`` the constraint transmission dc flow rule is defined and calculated by the following code fragment:
+::
+
+    m.transmission_dc_flow = pyomo.Constraint(                                  
+        m.tm, m.dc_flow_tuples,
+        rule=transmission_dc_flow_rule,
+        doc='dc power flow ')
+
+::
+
+	def transmission_dc_flow_rule(m, tm, sin, sout, tra, com):
+        return (m.e_tra_in[tm, sin, sout, tra, com] -
+                m.e_tra_in[tm, sout, sin, tra, com] ==    
+                m.transmission.loc[sin, sout, tra, com]['admittance'] * 
+                (m.angle[tm, sin] - m.angle[tm, sout]))
 
 Storage Constraints
 ^^^^^^^^^^^^^^^^^^^
